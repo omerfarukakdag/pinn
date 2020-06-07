@@ -34,23 +34,30 @@ This should start a development server with the React application that will inte
 
 # Screenshots
 
-Login
-![Alt text](images/login.PNG?raw=true 'login')
+### Login
 
-Application
-![Alt text](images/app.PNG?raw=true 'app')
+![Alt text](images/login.PNG?raw=true "login")
 
-Import Bookmarks
-![Alt text](images/import.PNG?raw=true 'import')
+### Application
 
-Dashboard
-![Alt text](images/main.PNG?raw=true 'main')
+![Alt text](images/app.PNG?raw=true "app")
 
-Update a bookmark
-![Alt text](images/update.PNG?raw=true 'update')
+### Import Bookmarks
 
-Generate QR Code
-![Alt text](images/qr.PNG?raw=true 'qr')
+![Alt text](images/import.PNG?raw=true "import")
 
-Export Bookmarks
-![Alt text](images/export.PNG?raw=true 'export')
+### Dashboard
+
+![Alt text](images/main.PNG?raw=true "main")
+
+### Update a bookmark
+
+![Alt text](images/update.PNG?raw=true "update")
+
+### Generate QR Code
+
+![Alt text](images/qr.PNG?raw=true "qr")
+
+### Export Bookmarks
+
+![Alt text](images/export.PNG?raw=true "export")
