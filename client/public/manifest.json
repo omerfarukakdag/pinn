@@ -1,0 +1,15 @@
+{
+  "short_name": "Pinn",
+  "name": "Pinn",
+  "icons": [
+    {
+      "src": "logo-medium.png",
+      "type": "image/png",
+      "sizes": "150x103"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}

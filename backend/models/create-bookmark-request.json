@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "create-bookmark-scheme",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "required": ["name", "url", "categoryId"],
+    "properties": {
+      "bookmarkId": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "url": {
+        "type": "string"
+      },
+      "categoryId": {
+        "type": "string"
+      },
+      "userId": {
+        "type": "string"
+      },
+      "createDate": {
+        "type": "string"
+      },
+      "attachmentUrl": {
+        "type": "string"
+      },
+      "notes": {
+        "type": "string"
+      },
+      "tag": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  }
+}

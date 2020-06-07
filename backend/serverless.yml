@@ -1,0 +1,627 @@
+service:
+  name: ofa-pinn-app
+
+plugins:
+  - serverless-webpack
+  - serverless-reqvalidator-plugin
+  - serverless-aws-documentation
+  - serverless-iam-roles-per-function
+  - serverless-dynamodb-local
+  - serverless-offline
+
+package:
+  individually: true
+
+provider:
+  tracing:
+    lambda: true
+    apiGateway: true
+
+  name: aws
+  runtime: nodejs12.x
+
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+
+  environment:
+    APP_NAME: ofa-pinn-app
+    BOOKMARKS_TABLE: Bookmarks-${self:provider.stage}
+    BOOKMARKS_INDEX_NAME: BookmarkIdIndex
+    CATEGORIES_TABLE: Categories-${self:provider.stage}
+    CATEGORIES_INDEX_NAME: CategoryIdIndex
+    BOOKMARKS_S3_BUCKET: ${self:provider.environment.APP_NAME}-s3-bucket-${self:provider.stage}
+    SIGNED_URL_EXPIRATION: 300
+    Auth0JWKSUrl: https://akdag.auth0.com/.well-known/jwks.json
+
+custom:
+  topicName: bookmarkTopic-${self:provider.stage}
+
+  serverless-offline:
+    port: 3003
+
+  dynamodb:
+    stages:
+      - ${self:provider.stage}
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+
+  webpack:
+    webpackConfig: ./webpack.config.js
+    includeModules: true
+  documentation:
+    api:
+      info:
+        version: v1.0.0
+        title: Pinn API
+        description: Online bookmark manager
+    models:
+      - name: CreateBookmarkRequest
+        contentType: application/json
+        schema: ${file(models/create-bookmark-request.json)}
+      - name: CreateCategoryRequest
+        contentType: application/json
+        schema: ${file(models/create-category-request.json)}
+      - name: DeleteBookmarkRequest
+        contentType: application/json
+        schema: ${file(models/delete-bookmark-request.json)}
+      - name: DeleteCategoryRequest
+        contentType: application/json
+        schema: ${file(models/delete-category-request.json)}
+      - name: UpdateBookmarkRequest
+        contentType: application/json
+        schema: ${file(models/update-bookmark-request.json)}
+      - name: UpdateCategoryRequest
+        contentType: application/json
+        schema: ${file(models/update-category-request.json)}
+      - name: GenerateUploadUrlRequest
+        contentType: application/json
+        schema: ${file(models/generateUploadUrl-request.json)}
+
+functions:
+  Auth:
+    handler: src/lambda/auth/auth0Authorizer.handler
+
+  CreateBookmark:
+    handler: src/lambda/http/bookmark/createBookmark.handler
+    events:
+      - http:
+          method: post
+          path: bookmarks
+          authorizer: Auth
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Create a new bookmark
+            description: Create a new bookmark
+            requestModels:
+              'application/json': CreateBookmarkRequest
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-create-bookmark-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}/index/${self:provider.environment.CATEGORIES_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+  CreateCategory:
+    handler: src/lambda/http/category/createCategory.handler
+    events:
+      - http:
+          method: post
+          path: categories
+          authorizer: Auth
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Create a new category
+            description: Create a new category
+            requestModels:
+              'application/json': CreateCategoryRequest
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-create-category-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:PutItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}/index/${self:provider.environment.CATEGORIES_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  DeleteAttachment:
+    handler: src/lambda/http/bookmark/deleteAttachment.handler
+    events:
+      - http:
+          method: delete
+          path: bookmarks/{bookmarkId}/attachment
+          authorizer: Auth
+          cors: true
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-delete-attachment-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow
+        Action:
+          - s3:DeleteObject
+        Resource: 'arn:aws:s3:::${self:provider.environment.BOOKMARKS_S3_BUCKET}/*'
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  DeleteBookmark:
+    handler: src/lambda/http/bookmark/deleteBookmark.handler
+    events:
+      - http:
+          method: delete
+          path: bookmarks
+          authorizer: Auth
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Delete a bookmark item
+            description: Delete a bookmark item
+            requestModels:
+              'application/json': DeleteBookmarkRequest
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-delete-bookmark-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:DeleteItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow
+        Action:
+          - s3:DeleteObject
+        Resource: 'arn:aws:s3:::${self:provider.environment.BOOKMARKS_S3_BUCKET}/*'
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  DeleteCategory:
+    handler: src/lambda/http/category/deleteCategory.handler
+    events:
+      - http:
+          method: delete
+          path: categories
+          authorizer: Auth
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Delete a category item
+            description: Delete a category item
+            requestModels:
+              'application/json': DeleteCategoryRequest
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-delete-category-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:DeleteItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}/index/${self:provider.environment.CATEGORIES_INDEX_NAME}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:DeleteItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow
+        Action:
+          - s3:DeleteObject
+        Resource: 'arn:aws:s3:::${self:provider.environment.BOOKMARKS_S3_BUCKET}/*'
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  GenerateUploadUrl:
+    handler: src/lambda/http/bookmark/generateUploadUrl.handler
+    events:
+      - http:
+          method: post
+          path: bookmarks/{bookmarkId}/attachment
+          authorizer: Auth
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Generate upload url of a bookmark
+            description: Generate upload url of a bookmark
+            requestModels:
+              'application/json': GenerateUploadUrlRequest
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-s3-bookmark-upload-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+          - s3:GetObject
+        Resource: 'arn:aws:s3:::${self:provider.environment.BOOKMARKS_S3_BUCKET}/*'
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  GetBookmark:
+    handler: src/lambda/http/bookmark/getBookmark.handler
+    events:
+      - http:
+          method: get
+          path: bookmarks/{bookmarkId}
+          authorizer: Auth
+          cors: true
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-get-bookmark-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  GetCategory:
+    handler: src/lambda/http/category/getCategory.handler
+    events:
+      - http:
+          method: get
+          path: categories/{categoryId}
+          authorizer: Auth
+          cors: true
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-get-category-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}/index/${self:provider.environment.CATEGORIES_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  GetBookmarks:
+    handler: src/lambda/http/bookmark/getBookmarks.handler
+    events:
+      - http:
+          method: get
+          path: bookmarks
+          authorizer: Auth
+          cors: true
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-get-bookmarks-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  GetCategories:
+    handler: src/lambda/http/category/getCategories.handler
+    events:
+      - http:
+          method: get
+          path: categories
+          authorizer: Auth
+          cors: true
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-get-categories-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}/index/${self:provider.environment.CATEGORIES_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  UpdateBookmark:
+    handler: src/lambda/http/bookmark/updateBookmark.handler
+    events:
+      - http:
+          method: patch
+          path: bookmarks/{bookmarkId}
+          authorizer: Auth
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Update a bookmark item
+            description: Update a bookmark item
+            requestModels:
+              'application/json': UpdateBookmarkRequest
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-update-bookmark-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  UpdateCategory:
+    handler: src/lambda/http/category/updateCategory.handler
+    events:
+      - http:
+          method: patch
+          path: categories/{categoryId}
+          authorizer: Auth
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Update a category item
+            description: Update a category item
+            requestModels:
+              'application/json': UpdateCategoryRequest
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-update-category-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CATEGORIES_TABLE}/index/${self:provider.environment.CATEGORIES_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+  BookmarkTopicHandler:
+    handler: src/lambda/sns/bookmarkTopic.handler
+    events:
+      - sns:
+          arn:
+            Fn::Join:
+              - ':'
+              - - arn:aws:sns
+                - Ref: AWS::Region
+                - Ref: AWS::AccountId
+                - ${self:custom.topicName}
+          topicName: ${self:custom.topicName}
+    iamRoleStatementsName: ${self:provider.environment.APP_NAME}-bookmark-topic-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BOOKMARKS_TABLE}/index/${self:provider.environment.BOOKMARKS_INDEX_NAME}
+      - Effect: Allow # xray permissions (required)
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource:
+          - '*'
+
+resources:
+  Resources:
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,OPTIONS,POST'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+
+    RequestBodyValidator:
+      Type: AWS::ApiGateway::RequestValidator
+      Properties:
+        Name: 'request-body-validator'
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ValidateRequestBody: true
+        ValidateRequestParameters: false
+
+    BookmarksDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createDate
+            AttributeType: S
+          - AttributeName: bookmarkId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: bookmarkId
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.BOOKMARKS_TABLE}
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.BOOKMARKS_INDEX_NAME}
+            KeySchema:
+              - AttributeName: bookmarkId
+                KeyType: HASH
+              - AttributeName: createDate
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL # What attributes will be copied to an index
+
+    CategoriesDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createDate
+            AttributeType: S
+          - AttributeName: categoryId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: categoryId
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.CATEGORIES_TABLE}
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.CATEGORIES_INDEX_NAME}
+            KeySchema:
+              - AttributeName: categoryId
+                KeyType: HASH
+              - AttributeName: createDate
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL # What attributes will be copied to an index
+
+    BookmarkAttachmentsBucket:
+      Type: AWS::S3::Bucket
+      DependsOn: SNSTopicPolicy
+      Properties:
+        BucketName: ${self:provider.environment.BOOKMARKS_S3_BUCKET}
+        NotificationConfiguration:
+          TopicConfigurations:
+            - Event: s3:ObjectCreated:Put
+              Topic: !Ref BookmarkTopic
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - '*'
+              AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+                - HEAD
+              MaxAge: 300
+
+    SNSTopicPolicy:
+      Type: AWS::SNS::TopicPolicy
+      Properties:
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: '*'
+              Action: sns:Publish
+              Resource: !Ref BookmarkTopic
+              Condition:
+                ArnLike:
+                  AWS:SourceArn: arn:aws:s3:::${self:provider.environment.BOOKMARKS_S3_BUCKET}
+        Topics:
+          - !Ref BookmarkTopic
+
+    BookmarkTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        DisplayName: Bookmark bucket topic
+        TopicName: ${self:custom.topicName}
+
+    BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        PolicyDocument:
+          Id: MyPolicy
+          Version: '2012-10-17'
+          Statement:
+            - Sid: PublicReadForGetBucketObjects
+              Effect: Allow
+              Principal: '*'
+              Action: 's3:GetObject'
+              Resource: 'arn:aws:s3:::${self:provider.environment.BOOKMARKS_S3_BUCKET}/*'
+        Bucket: !Ref BookmarkAttachmentsBucket

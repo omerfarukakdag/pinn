@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "generateUploadUrl-scheme",
+  "type": "object",
+  "properties": {
+    "fileName": {
+      "type": "string"
+    },
+    "fileType": {
+      "type": "string"
+    }
+  },
+  "required": ["fileName", "fileType"],
+  "additionalProperties": false
+}

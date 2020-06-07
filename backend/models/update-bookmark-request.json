@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "update-bookmark-scheme",
+  "type": "object",
+  "properties": {
+    "bookmarkId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "categoryId": {
+      "type": "string"
+    },
+    "userId": {
+      "type": "string"
+    },
+    "createDate": {
+      "type": "string"
+    },
+    "attachmentUrl": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "tag": {
+      "type": "string"
+    }
+  },
+  "required": ["bookmarkId", "name", "url", "categoryId", "attachmentUrl", "notes", "tag"],
+  "additionalProperties": false
+}

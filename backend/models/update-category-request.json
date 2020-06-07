@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "update-category-scheme",
+  "type": "object",
+  "properties": {
+    "categoryId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "userId": {
+      "type": "string"
+    },
+    "createDate": {
+      "type": "string"
+    }
+  },
+  "required": ["categoryId", "name"],
+  "additionalProperties": false
+}
